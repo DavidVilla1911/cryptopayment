@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prenotazione - Pagamento Crypto</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .payment-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .crypto-selector {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 2px solid var(--secondary);
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .qr-container {
+            text-align: center;
+            margin: 25px 0;
+        }
+
+        #qrCode {
+            width: 220px;
+            height: 220px;
+            border: 10px solid white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .address-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: monospace;
+            margin: 15px 0;
+        }
+
+        .warning {
+            color: #e74c3c;
+            background: #fdeded;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .network-fee {
+            color: #27ae60;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="payment-container">
+        <h1>🪙 Pagamento Crypto - 120€/Giorno</h1>
+        
+        <select class="crypto-selector" id="cryptoSelect">
+            <!-- Bitcoin -->
+            <option value="btc">BTC - Rete Bitcoin</option>
+            
+            <!-- Solana -->
+            <option value="sol">SOL - Solana</option>
+            <option value="usdc-sol">USDC (Solana)</option>
+            
+            <!-- EVM Generico -->
+            <option value="usdc-polygon">USDC (Polygon)</option>
+            <option value="usdt-polygon">USDT (Polygon)</option>
+            <option value="usdc-arb">USDC (Arbitrum)</option>
+            <option value="usdt-arb">USDT (Arbitrum)</option>
+            <option value="usdc-opt">USDC (Optimism)</option>
+        </select>
+
+        <div class="qr-container">
+            <img id="qrCode" src="" alt="QR Code">
+        </div>
+
+        <div class="network-fee" id="networkFee"></div>
+
+        <div class="address-box">
+            <div>Indirizzo:</div>
+            <div id="walletAddress">...</div>
+        </div>
+
+        <div class="warning">
+            ⚠️ Attenzione:
+            <ul>
+                <li>Verifica rete e token prima di inviare</li>
+                <li>Transazioni errate non verranno rimborsate</li>
+                <li>Importo fisso: 120€</li>
+            </ul>
+        </div>
+
+        <div id="livePrice" style="text-align: center; margin: 15px 0;"></div>
+    </div>
+
+    <script>
+        // Configurazione indirizzi (DA NON MODIFICARE)
+        const walletConfig = {
+            // Bitcoin
+            'btc': {
+                address: 'bc1qwxj964786rrddya6xe4u40ta6qkpnahsu2els8',
+                type: 'btc',
+                fee: '~1.50€'
+            },
+            
+            // Solana
+            'sol': {
+                address: '7afWZsLqqHWzuJ4YxWyoNWx4Xp3rUdSwznJrTfxipo7S',
+                type: 'sol',
+                fee: '~0.001€'
+            },
+            'usdc-sol': {
+                address: '7afWZsLqqHWzuJ4YxWyoNWx4Xp3rUdSwznJrTfxipo7S',
+                type: 'sol-token',
+                token: 'USDC',
+                fee: '~0.001€'
+            },
+            
+            // EVM (stesso indirizzo per tutte le reti)
+            'usdc-polygon': {
+                address: '0x589225a945014111FA6A545f9357EF9934d3cbd4',
+                type: 'evm',
+                chainId: 137, // Polygon
+                token: 'USDC',
+                fee: '~0.02€'
+            },
+            'usdt-polygon': {
+                address: '0x589225a945014111FA6A545f9357EF9934d3cbd4',
+                type: 'evm',
+                chainId: 137,
+                token: 'USDT',
+                fee: '~0.02€'
+            },
+            'usdc-arb': {
+                address: '0x589225a945014111FA6A545f9357EF9934d3cbd4',
+                type: 'evm',
+                chainId: 42161, // Arbitrum
+                token: 'USDC',
+                fee: '~0.05€'
+            },
+            'usdt-arb': {
+                address: '0x589225a945014111FA6A545f9357EF9934d3cbd4',
+                type: 'evm',
+                chainId: 42161,
+                token: 'USDT',
+                fee: '~0.05€'
+            },
+            'usdc-opt': {
+                address: '0x589225a945014111FA6A545f9357EF9934d3cbd4',
+                type: 'evm',
+                chainId: 10, // Optimism
+                token: 'USDC',
+                fee: '~0.05€'
+            }
+        };
+
+        function updatePaymentInfo() {
+            const selected = document.getElementById('cryptoSelect').value;
+            const config = walletConfig[selected];
+            
+            // Genera URI
+            let uri;
+            switch(config.type) {
+                case 'btc':
+                    uri = `bitcoin:${config.address}?amount=BTC_AMOUNT`;
+                    break;
+                    
+                case 'sol':
+                    uri = `solana:${config.address}?amount=120`;
+                    break;
+                    
+                case 'sol-token':
+                    uri = `solana:${config.address}?amount=120&token=${config.token}`;
+                    break;
+                    
+                case 'evm':
+                    uri = `ethereum:${config.address}@${config.chainId}?value=120&currency=${config.token}`;
+                    break;
+            }
+
+            // Aggiorna elementi UI
+            document.getElementById('qrCode').src = 
+                `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(uri)}`;
+            
+            document.getElementById('walletAddress').textContent = config.address;
+            document.getElementById('networkFee').textContent = `Fee di rete: ${config.fee}`;
+
+            // Aggiorna prezzi per crypto volatile
+            if(['btc', 'sol'].includes(selected)) {
+                updateLivePrice(selected);
+            } else {
+                document.getElementById('livePrice').innerHTML = '';
+            }
+        }
+
+        async function updateLivePrice(coin) {
+            try {
+                const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=eur`);
+                const data = await response.json();
+                const price = data[coin].eur;
+                const amount = (120 / price).toFixed(coin === 'btc' ? 6 : 4);
+                
+                document.getElementById('livePrice').innerHTML = `
+                    <strong>Importo corrente:</strong><br>
+                    ${amount} ${coin.toUpperCase()} ≈ 120€<br>
+                    <small>(Aggiornato: ${new Date().toLocaleTimeString()})</small>
+                `;
+            } catch (error) {
+                console.error('Errore nel fetch del prezzo:', error);
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('cryptoSelect').addEventListener('change', updatePaymentInfo);
+        
+        // Inizializzazione
+        updatePaymentInfo();
+        setInterval(() => {
+            const selected = document.getElementById('cryptoSelect').value;
+            if(['btc', 'sol'].includes(selected)) {
+                updateLivePrice(selected);
+            }
+        }, 60000);
+    </script>
+</body>
+</html>
